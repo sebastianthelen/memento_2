@@ -1,6 +1,8 @@
 from flask import Flask
 from flask import request
 from flask import redirect
+from flask import make_response
+import flask
 import time
 import requests
 import json
@@ -16,7 +18,7 @@ uri_g = None
 
 app = Flask(__name__)
 
-# query computes the original resource (URI-G) in a hierarchy
+# compute original resource (URI-G) in a hierarchy
 URI_G_TEMPLATE = (
     'PREFIX cdm: <http://publications.europa.eu/ontology/cdm#> '
     'select distinct ?predecessor where { '
@@ -25,15 +27,15 @@ URI_G_TEMPLATE = (
     'filter not exists{?anotherWork cdm:complex_work_has_member_work ?predecessor.}} '
 )
 
-# query determines in which dimension an evolutive work should
-# perform datetime negotiation in
+# determine in which dimension an evolutive work should
+# perform datetime negotiation in (indicated by cdm:datetime_negotiation)
 DATETIME_PROPERTY_TEMPLATE = (
     'PREFIX cdm: <http://publications.europa.eu/ontology/cdm#> '
     'select distinct ?prop where {<%(uri)s> cdm:datetime_negotiation ?prop.}'
 )
 
-# query computes the location information of the next redirect based on
-# in the current uri and the accept-datetime parameter
+# compute location information of next redirect based on
+# current uri and accept-datetime parameter
 LOCATION_TEMPLATE = (
     "PREFIX cdm: <http://publications.europa.eu/ontology/cdm#> "
     "SELECT distinct ?successor (bif:datediff( 'minute', xsd:dateTime(str(?date)) ,'%(accept_datetime)s'^^xsd:dateTime) as ?diff_date) "
@@ -50,22 +52,30 @@ LOCATION_TEMPLATE = (
     "LIMIT 1 "
 )
 
+# perform sparql describe query for given uri
 DESCRIBE_TEMPLATE = (
     'PREFIX cdm: <http://publications.europa.eu/ontology/cdm#> '
     'DESCRIBE <%(uri)s> '
 )
 
-# query tests whether a given work is an instance of cdm:complex_work
+# test whether given work is instance of cdm:complex_work
 COMPLEX_WORK_TEMPLATE = (
     'define input:inference "cdm_rule_set" '
     'PREFIX cdm: <http://publications.europa.eu/ontology/cdm#> '
     'ASK { <%(uri)s> a <http://publications.europa.eu/ontology/cdm#complex_work>.}'
 )
 
-# perform sparql query and return result as json format
+# return memento datetime of given resource (corresponds to cdm:work_date_document)
+MEMENTO_DATETIME_TEMPLATE = (
+    'PREFIX cdm: <http://publications.europa.eu/ontology/cdm#> '
+    'select ?date ' 
+    'where '
+    '{<%(uri)s> cdm:work_date_document ?date.}'
+)
 
 
 def sparqlQuery(query, base_url, format="application/json"):
+    """perform sparql query and return result"""
     payload = {
         "default-graph-uri": "",
         "query": query,
@@ -79,15 +89,15 @@ def sparqlQuery(query, base_url, format="application/json"):
 
 @app.route('/memento/<id>')
 def processRequest(id=None):
+    """process request"""
     response = None
     uri = "http://publications.europa.eu/resource/celex/" + id
-    
+    # return rdf representation not a complex work
     if not(isComplexWork(uri)):
         response = mementoCallback(uri)
         return response
-        
     query = URI_G_TEMPLATE % {'uri': uri}
-    #LOGGER.debug('URI_G_TEMPLATE: %s' % query )
+    LOGGER.debug('URI_G_TEMPLATE: %s' % query )
     json_str = sparqlQuery(query, 'http://abel:8890/sparql')
     json_obj = json.loads(json_str)
     global uri_g
@@ -101,24 +111,24 @@ def processRequest(id=None):
 
 
 def originalResourceCallback(uri_g):
+    """processing logic when requesting an original resource"""
     LOGGER.debug('Executing originalResourceCallback...')
     accept_datetime = None
     location = None
+    # redirect to intermediate resource
     if 'Accept-Datetime' in request.headers:
-        # redirect to intermediate resource (timegate)
         accept_datetime = request.headers['Accept-Datetime']
         LOGGER.debug('Accept-Datetime: %s' % accept_datetime)
         # determine negotiation dimension
         datetime_property = determineDatetimeProperty(uri_g)
-        # compute redirect
+        # compute location infomation of redirect
         location = determineLocation(uri_g, accept_datetime)
+    # redirect to most recent representation
     else:
-        # redirect to most recent representation
-        #location = computeMostRecentRepresentation(uri_g)
-
-        LOGGER.debug('Executing computeMostRecentRepresentation...')
+        # current timestamp
         now = time.strftime("%Y-%m-%dT%XZ")
         location = uri_g
+        # cascading selection of most recent representation
         while isComplexWork(location):
             location = determineLocation(location, now)
     # link headers
@@ -137,6 +147,7 @@ def originalResourceCallback(uri_g):
 
 
 def timegateCallback(uri):
+    """processing logic when requesting an intermediate resource/timegate"""
     LOGGER.debug('Executing timegateCallback...')
     # default to now if no accept-datetime is provided
     accept_datetime = ('Accept-Datetime' in request.headers) and request.headers[
@@ -158,10 +169,31 @@ def timegateCallback(uri):
             'localhost_uri_g': localhost_uri_g, 'localhost_uri_t': localhost_uri_t}
     return redirect_obj
 
-def mementoCallback(uri)
+def mementoCallback(uri):
+    """processing logic when requesting a memento"""
+    LOGGER.debug('Executing mementoCallback...')
+    describe_query = DESCRIBE_TEMPLATE  % {'uri': uri}
+    #LOGGER.debug('DESCRIBE_TEMPLATE: %s' % describe_query )
+    describe = sparqlQuery(describe_query, 'http://abel:8890/sparql', format='text/html')
+    memento_datemtime_query = MEMENTO_DATETIME_TEMPLATE  % {'uri': uri}
+    #LOGGER.debug('MEMENTO_DATETIME_TEMPLATE: %s' % memento_datemtime_query )
+    json_str = sparqlQuery(memento_datemtime_query, 'http://abel:8890/sparql')
+    json_obj = json.loads(json_str)
+    # link headers
+    localhost_uri_g = 'localhost:5000/%s' % toLocalhostUri(uri_g)
+    localhost_uri_t = 'localhost:5000/%s' % toLocalhostUri(
+        uri_g + '?rel=timemap')
+    memento_datetime = json_obj['results']['bindings'][0]['date']['value']
+    response = make_response(describe, 200)
+    response.headers['Memento-Datetime'] = memento_datetime
+    response.headers['Link'] = '<%(localhost_uri_g)s>; rel="original timegate", ' \
+        '<%(localhost_uri_t)s>; rel="timemap"' % {
+            'localhost_uri_g': localhost_uri_g, 'localhost_uri_t': localhost_uri_t}
+    return response
     
-# checks whether the uri represents an instance of type cdm:complex_work
+    
 def isComplexWork(uri):
+    """check whether the uri represents an instance of type cdm:complex_work"""
     query = COMPLEX_WORK_TEMPLATE % {'uri': uri}
     #LOGGER.debug('COMPLEX_WORK_TEMPLATE: %s' % query )
     json_str = sparqlQuery(query, 'http://abel:8890/sparql')
@@ -169,8 +201,8 @@ def isComplexWork(uri):
     return json_obj['boolean'] == True and True or False
 
 
-# determines the cdm property used for datetime negotiation
 def determineDatetimeProperty(uri):
+    """determine the cdm property used for datetime negotiation"""
     query = DATETIME_PROPERTY_TEMPLATE % {'uri': uri}
     #LOGGER.debug('DATETIME_PROPERTY_TEMPLATE: %s' % query )
     json_str = sparqlQuery(query, 'http://abel:8890/sparql')
@@ -179,10 +211,8 @@ def determineDatetimeProperty(uri):
     LOGGER.debug("Datetime negotiation property: %s" % datetime_property)
     return datetime_property
 
-# determines the location information for the next redirect
-
-
 def determineLocation(uri, accept_datetime):
+    """determine the location information for next redirect"""
     query = LOCATION_TEMPLATE % {
         'uri': uri, 'accept_datetime': accept_datetime}
     #LOGGER.debug('LOCATION_TEMPLATE: %s' % query )
@@ -192,10 +222,8 @@ def determineLocation(uri, accept_datetime):
     LOGGER.debug("Location: %s" % location)
     return location
 
-
 def toCelexUri(uri):
     return uri.replace('memento', 'http://publications.europa.eu/resource/celex')
-
 
 def toLocalhostUri(uri):
     return uri.replace('http://publications.europa.eu/resource/celex', 'memento')
@@ -203,24 +231,19 @@ def toLocalhostUri(uri):
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
-
     # set logging format
     logFormatter = logging.Formatter(
         "%(asctime)s [%(levelname)-5.5s]  %(message)s")
-
     # create LOGGER
     global LOGGER
     LOGGER = logging.getLogger()
-
     # set up file logging
     fileHandler = logging.handlers.RotatingFileHandler(
         "logging.log", maxBytes=1000000000, backupCount=2)
     fileHandler.setFormatter(logFormatter)
     LOGGER.addHandler(fileHandler)
-
     # set up console logging
     consoleHandler = logging.StreamHandler()
     consoleHandler.setFormatter(logFormatter)
     LOGGER.addHandler(consoleHandler)
-
     app.run(debug=True)

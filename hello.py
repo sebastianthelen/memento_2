@@ -65,10 +65,11 @@ COMPLEX_WORK_TEMPLATE = (
     'ASK { <%(uri)s> a <http://publications.europa.eu/ontology/cdm#complex_work>.}'
 )
 
-# return memento datetime of given resource (corresponds to cdm:work_date_document)
+# return memento datetime of given resource (corresponds to
+# cdm:work_date_document)
 MEMENTO_DATETIME_TEMPLATE = (
     'PREFIX cdm: <http://publications.europa.eu/ontology/cdm#> '
-    'select ?date ' 
+    'select ?date '
     'where '
     '{<%(uri)s> cdm:work_date_document ?date.}'
 )
@@ -97,7 +98,7 @@ def processRequest(id=None):
         response = mementoCallback(uri)
         return response
     query = URI_G_TEMPLATE % {'uri': uri}
-    LOGGER.debug('URI_G_TEMPLATE: %s' % query )
+    LOGGER.debug('URI_G_TEMPLATE: %s' % query)
     json_str = sparqlQuery(query, 'http://abel:8890/sparql')
     json_obj = json.loads(json_str)
     global uri_g
@@ -131,10 +132,11 @@ def originalResourceCallback(uri_g):
         # cascading selection of most recent representation
         while isComplexWork(location):
             location = determineLocation(location, now)
-            if location == None: break
+            if location == None:
+                break
     # actually it is not Memento compliant to return an HTTP 406 here.
     # See section 4.5.3 of the specification
-    if location == None: 
+    if location == None:
         return make_response("Bad Request. Check your query parameters", 406)
     # link headers
     localhost_uri_g = 'localhost:5000/%s' % toLocalhostUri(uri_g)
@@ -161,8 +163,8 @@ def timegateCallback(uri):
     datetime_property = determineDatetimeProperty(uri)
     # compute redirect
     location = determineLocation(uri, accept_datetime)
-    if location == None: 
-       return make_response("Bad Request. Check your query parameters", 406)
+    if location == None:
+        return make_response("Bad Request. Check your query parameters", 406)
     # link headers
     localhost_uri_g = 'localhost:5000/%s' % toLocalhostUri(uri_g)
     localhost_uri_t = 'localhost:5000/%s' % toLocalhostUri(
@@ -176,13 +178,15 @@ def timegateCallback(uri):
             'localhost_uri_g': localhost_uri_g, 'localhost_uri_t': localhost_uri_t}
     return redirect_obj
 
+
 def mementoCallback(uri):
     """processing logic when requesting a memento"""
     LOGGER.debug('Executing mementoCallback...')
-    describe_query = DESCRIBE_TEMPLATE  % {'uri': uri}
+    describe_query = DESCRIBE_TEMPLATE % {'uri': uri}
     #LOGGER.debug('DESCRIBE_TEMPLATE: %s' % describe_query )
-    describe = sparqlQuery(describe_query, 'http://abel:8890/sparql', format='text/html')
-    memento_datemtime_query = MEMENTO_DATETIME_TEMPLATE  % {'uri': uri}
+    describe = sparqlQuery(
+        describe_query, 'http://abel:8890/sparql', format='text/html')
+    memento_datemtime_query = MEMENTO_DATETIME_TEMPLATE % {'uri': uri}
     #LOGGER.debug('MEMENTO_DATETIME_TEMPLATE: %s' % memento_datemtime_query )
     json_str = sparqlQuery(memento_datemtime_query, 'http://abel:8890/sparql')
     json_obj = json.loads(json_str)
@@ -201,8 +205,8 @@ def mementoCallback(uri):
         '<%(localhost_uri_t)s>; rel="timemap"' % {
             'localhost_uri_g': localhost_uri_g, 'localhost_uri_t': localhost_uri_t}
     return response
-    
-    
+
+
 def isComplexWork(uri):
     """check whether the uri represents an instance of type cdm:complex_work"""
     query = COMPLEX_WORK_TEMPLATE % {'uri': uri}
@@ -222,6 +226,7 @@ def determineDatetimeProperty(uri):
     LOGGER.debug("Datetime negotiation property: %s" % datetime_property)
     return datetime_property
 
+
 def determineLocation(uri, accept_datetime):
     """determine the location information for next redirect"""
     query = LOCATION_TEMPLATE % {
@@ -233,12 +238,15 @@ def determineLocation(uri, accept_datetime):
     try:
         location = json_obj['results']['bindings'][0]['successor']['value']
     except:
-        LOGGER.debug('determineLocation: Could not determine redirect location...')
+        LOGGER.debug(
+            'determineLocation: Could not determine redirect location...')
     LOGGER.debug("Location: %s" % location)
     return location
 
+
 def toCelexUri(uri):
     return uri.replace('memento', 'http://publications.europa.eu/resource/celex')
+
 
 def toLocalhostUri(uri):
     return uri.replace('http://publications.europa.eu/resource/celex', 'memento')
@@ -262,3 +270,5 @@ if __name__ == '__main__':
     consoleHandler.setFormatter(logFormatter)
     LOGGER.addHandler(consoleHandler)
     app.run(debug=True)
+    # run on public ip
+    # app.run('0.0.0.0')

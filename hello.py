@@ -131,6 +131,11 @@ def originalResourceCallback(uri_g):
         # cascading selection of most recent representation
         while isComplexWork(location):
             location = determineLocation(location, now)
+            if location == None: break
+    # actually it is not Memento compliant to return an HTTP 406 here.
+    # See section 4.5.3 of the specification
+    if location == None: 
+        return make_response("Bad Request. Check your query parameters", 406)
     # link headers
     localhost_uri_g = 'localhost:5000/%s' % toLocalhostUri(uri_g)
     localhost_uri_t = 'localhost:5000/%s' % toLocalhostUri(
@@ -156,6 +161,8 @@ def timegateCallback(uri):
     datetime_property = determineDatetimeProperty(uri)
     # compute redirect
     location = determineLocation(uri, accept_datetime)
+    if location == None: 
+       return make_response("Bad Request. Check your query parameters", 406)
     # link headers
     localhost_uri_g = 'localhost:5000/%s' % toLocalhostUri(uri_g)
     localhost_uri_t = 'localhost:5000/%s' % toLocalhostUri(
@@ -180,10 +187,14 @@ def mementoCallback(uri):
     json_str = sparqlQuery(memento_datemtime_query, 'http://abel:8890/sparql')
     json_obj = json.loads(json_str)
     # link headers
+    memento_datetime = None
+    try:
+        memento_datetime = json_obj['results']['bindings'][0]['date']['value']
+    except:
+        return make_response("Not found. Could not retrieve resource metadata", 404)
     localhost_uri_g = 'localhost:5000/%s' % toLocalhostUri(uri_g)
     localhost_uri_t = 'localhost:5000/%s' % toLocalhostUri(
         uri_g + '?rel=timemap')
-    memento_datetime = json_obj['results']['bindings'][0]['date']['value']
     response = make_response(describe, 200)
     response.headers['Memento-Datetime'] = memento_datetime
     response.headers['Link'] = '<%(localhost_uri_g)s>; rel="original timegate", ' \
@@ -218,7 +229,11 @@ def determineLocation(uri, accept_datetime):
     #LOGGER.debug('LOCATION_TEMPLATE: %s' % query )
     json_str = sparqlQuery(query, 'http://abel:8890/sparql')
     json_obj = json.loads(json_str)
-    location = json_obj['results']['bindings'][0]['successor']['value']
+    location = None
+    try:
+        location = json_obj['results']['bindings'][0]['successor']['value']
+    except:
+        LOGGER.debug('determineLocation: Could not determine redirect location...')
     LOGGER.debug("Location: %s" % location)
     return location
 

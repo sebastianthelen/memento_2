@@ -1,0 +1,29 @@
+PREFIX cdm: <http://publications.europa.eu/ontology/cdm#> INSERT IN GRAPH <http://consolidation/test> 
+{ 
+<http://publications.europa.eu/resource/celex/01992L0043> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://publications.europa.eu/ontology/cdm#complex_work> . 
+<http://publications.europa.eu/resource/celex/01992L0043> <http://publications.europa.eu/ontology/cdm#datetime_negotiation> <http://publications.europa.eu/ontology/cdm#work_date_document>.
+<http://publications.europa.eu/resource/celex/01992L0043> <http://publications.europa.eu/ontology/cdm#complex_work_has_member_work> <http://publications.europa.eu/resource/celex/01992L0043-20130701> .
+<http://publications.europa.eu/resource/celex/01992L0043> <http://publications.europa.eu/ontology/cdm#complex_work_has_member_work> <http://publications.europa.eu/resource/celex/01992L0043-20040501> .
+
+<http://publications.europa.eu/resource/celex/01992L0043-20130701> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://publications.europa.eu/ontology/cdm#complex_work> . 
+<http://publications.europa.eu/resource/celex/01992L0043-20130701> <http://publications.europa.eu/ontology/cdm#datetime_negotiation> <http://publications.europa.eu/ontology/cdm#work_date_creation>.
+<http://publications.europa.eu/resource/celex/01992L0043-20130701> <http://publications.europa.eu/ontology/cdm#complex_work_has_member_work> <http://publications.europa.eu/resource/celex/01992L0043-20130701_0> .
+<http://publications.europa.eu/resource/celex/01992L0043-20130701> <http://publications.europa.eu/ontology/cdm#complex_work_has_member_work> <http://publications.europa.eu/resource/celex/01992L0043-20130701_1> .
+
+<http://publications.europa.eu/resource/celex/01992L0043-20040501> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://publications.europa.eu/ontology/cdm#complex_work> . 
+<http://publications.europa.eu/resource/celex/01992L0043-20040501> <http://publications.europa.eu/ontology/cdm#datetime_negotiation> <http://publications.europa.eu/ontology/cdm#work_date_creation>.
+<http://publications.europa.eu/resource/celex/01992L0043-20040501> <http://publications.europa.eu/ontology/cdm#complex_work_has_member_work> <http://publications.europa.eu/resource/celex/01992L0043-20040501_0> .
+<http://publications.europa.eu/resource/celex/01992L0043-20040501> <http://publications.europa.eu/ontology/cdm#complex_work_has_member_work> <http://publications.europa.eu/resource/celex/01992L0043-20040501_1> .
+
+<http://publications.europa.eu/resource/celex/01992L0043-20130701_0> <http://publications.europa.eu/ontology/cdm#work_date_document> "2013-07-01+02:00"^^<http://www.w3.org/2001/XMLSchema#date>.
+<http://publications.europa.eu/resource/celex/01992L0043-20130701_0> <http://publications.europa.eu/ontology/cdm#work_date_creation> "2010-07-18+02:00"^^<http://www.w3.org/2001/XMLSchema#date>.
+
+<http://publications.europa.eu/resource/celex/01992L0043-20130701_1> <http://publications.europa.eu/ontology/cdm#work_date_document> "2013-07-01+02:00"^^<http://www.w3.org/2001/XMLSchema#date>.
+<http://publications.europa.eu/resource/celex/01992L0043-20130701_1> <http://publications.europa.eu/ontology/cdm#work_date_creation> "2011-07-18+02:00"^^<http://www.w3.org/2001/XMLSchema#date>.
+
+<http://publications.europa.eu/resource/celex/01992L0043-20040501_0> <http://publications.europa.eu/ontology/cdm#work_date_document> "2004-05-01+02:00"^^<http://www.w3.org/2001/XMLSchema#date>.
+<http://publications.europa.eu/resource/celex/01992L0043-20040501_0> <http://publications.europa.eu/ontology/cdm#work_date_creation> "2012-06-14+02:00"^^<http://www.w3.org/2001/XMLSchema#date>.
+
+<http://publications.europa.eu/resource/celex/01992L0043-20040501_1> <http://publications.europa.eu/ontology/cdm#work_date_document> "2004-05-01+02:00"^^<http://www.w3.org/2001/XMLSchema#date>.
+<http://publications.europa.eu/resource/celex/01992L0043-20040501_1> <http://publications.europa.eu/ontology/cdm#work_date_creation> "2013-06-14+02:00"^^<http://www.w3.org/2001/XMLSchema#date>.
+}

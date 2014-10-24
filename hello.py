@@ -71,7 +71,7 @@ MEMENTO_DATETIME_TEMPLATE = (
     'PREFIX cdm: <http://publications.europa.eu/ontology/cdm#> '
     'select ?date '
     'where '
-    '{<%(uri)s> cdm:work_date_document ?date.}'
+    '{<%(uri)s> cdm:work_date_creation ?date.}'
 )
 
 

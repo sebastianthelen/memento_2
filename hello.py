@@ -2,12 +2,16 @@ from flask import Flask
 from flask import request
 from flask import redirect
 from flask import make_response
+from email.utils import formatdate
+from wsgiref.handlers import format_date_time
 import flask
 import time
 import requests
 import json
 import logging
 import logging.handlers
+import email.utils as eut
+import datetime
 
 # suppress logging messages from requests lib
 requests_log = logging.getLogger("requests")
@@ -74,6 +78,32 @@ MEMENTO_DATETIME_TEMPLATE = (
     '{<%(uri)s> cdm:work_date_creation ?date.}'
 )
 
+# return related complex works
+RELATED_COMPLEX_WORKS = (
+    'define input:inference "cdm_rule_set" '
+    'prefix cdm: <http://publications.europa.eu/ontology/cdm#> '
+    'select distinct ?complex_work where {'
+    '<%(uri)s> cdm:complex_work_has_member_work|^cdm:complex_work_has_member_work ?complex_work.'
+    '?complex_work a cdm:complex_work. }'
+)
+# return related mementos together with their memento-datetime
+RELATED_MEMENTOS= (
+    'prefix cdm: <http://publications.europa.eu/ontology/cdm#> ' 
+    'select distinct ?memento ?date where {'
+    '<%(uri)s> cdm:complex_work_has_member_work ?memento.'
+    '?memento cdm:work_date_creation ?date.'
+    'filter not exists { ?memento cdm:complex_work_has_member_work ?member.} }'
+)
+
+# return timeamp related information (startdate, enddate and type of date)
+TIMEMAPINFO= (
+    'define input:inference "cdm_rule_set" '
+    'prefix cdm: <http://publications.europa.eu/ontology/cdm#> '
+    'select (min(?o) as ?startdate) (max(?o) as ?enddate) (?p as ?typeofdate) where {'
+    '<%(uri)s> cdm:datetime_negotiation ?p;  '
+    'cdm:complex_work_has_member_work ?member. '
+    '?member ?p ?o.}'
+)
 
 def sparqlQuery(query, base_url, format="application/json"):
     """perform sparql query and return result"""
@@ -89,11 +119,11 @@ def sparqlQuery(query, base_url, format="application/json"):
 
 
 @app.route('/memento/<id>')
-def processRequest(id=None):
-    """process request"""
+def processMementoRequest(id=None):
+    """process memento service request (non-information resources)"""
     response = None
     uri = "http://publications.europa.eu/resource/celex/" + id
-    # return rdf representation not a complex work
+    # return memento (target resource is not a complex work)
     if not(isComplexWork(uri)):
         response = mementoCallback(uri)
         return response
@@ -104,21 +134,39 @@ def processRequest(id=None):
     global uri_g
     uri_g = json_obj['results']['bindings'][0]['predecessor']['value']
     LOGGER.debug("URI-G: %s" % uri_g)
-    if uri_g == uri:
-        response = originalResourceCallback(uri)
+    # uri matches a complex work and the rel parameter is set to 'timemap'
+    if request.args.get('rel') == 'timemap':
+        response = timemapCallback(uri)
+    # uri matches a top level complex work (original timegate)
+    elif uri_g == uri:
+        response = originalTimegateCallback(uri)
+    # uri matches a complex work but not the top level one
     else:
         response = timegateCallback(uri)
     return response
 
+@app.route('/data/<id>')
+def processDataRdfRequest(id=None):
+    """process data representation request (information resources)"""
+    LOGGER.debug('Processing data request ...')
+    
+    response = None
+    uri = "http://publications.europa.eu/resource/celex/" + id
+    if id.endswith('.txt'):
+        response = dataRepresentationCallback(uri.replace('.txt',''), True)
+    else:
+        response = dataRepresentationCallback(uri.replace('.xml',''), False)
+    return response
 
-def originalResourceCallback(uri_g):
+
+def originalTimegateCallback(uri_g):
     """processing logic when requesting an original resource"""
     LOGGER.debug('Executing originalResourceCallback...')
     accept_datetime = None
     location = None
     # redirect to intermediate resource
     if 'Accept-Datetime' in request.headers:
-        accept_datetime = request.headers['Accept-Datetime']
+        accept_datetime = parseDate(request.headers['Accept-Datetime'])
         LOGGER.debug('Accept-Datetime: %s' % accept_datetime)
         # determine negotiation dimension
         datetime_property = determineDatetimeProperty(uri_g)
@@ -157,8 +205,8 @@ def timegateCallback(uri):
     """processing logic when requesting an intermediate resource/timegate"""
     LOGGER.debug('Executing timegateCallback...')
     # default to now if no accept-datetime is provided
-    accept_datetime = ('Accept-Datetime' in request.headers) and request.headers[
-        'Accept-Datetime'] or time.strftime("%Y-%m-%dT%XZ")
+    accept_datetime = ('Accept-Datetime' in request.headers) and parseDate(request.headers[
+        'Accept-Datetime']) or time.strftime("%Y-%m-%dT%XZ")
     # dimension of datetime negotiation
     datetime_property = determineDatetimeProperty(uri)
     # compute redirect
@@ -199,13 +247,87 @@ def mementoCallback(uri):
     localhost_uri_g = 'localhost:5000/%s' % toLocalhostUri(uri_g)
     localhost_uri_t = 'localhost:5000/%s' % toLocalhostUri(
         uri_g + '?rel=timemap')
-    response = make_response(describe, 200)
-    response.headers['Memento-Datetime'] = memento_datetime
+    #response = make_response(describe, 200)
+    response = redirect(toLocalhostDataUri(uri,'.xml'), code=303)
+    response.headers['Memento-Datetime'] = stringToHTTPDate(memento_datetime)
     response.headers['Link'] = '<%(localhost_uri_g)s>; rel="original timegate", ' \
         '<%(localhost_uri_t)s>; rel="timemap"' % {
             'localhost_uri_g': localhost_uri_g, 'localhost_uri_t': localhost_uri_t}
     return response
 
+def timemapCallback(uri):
+    """processing logic when requesting a timemap"""
+    LOGGER.debug('Executing timemapCallback...')
+    localhost_uri_g = 'localhost:5000/%s' % toLocalhostUri(uri_g)
+    redirect_obj = None
+    if(request.headers['Accept'] == 'application/link-format'):
+        redirect_obj = redirect(toLocalhostDataUri(uri,'.txt'), code=303)
+    else:
+        redirect_obj = redirect(toLocalhostDataUri(uri,'.xml'), code=303)
+    redirect_obj.headers['Link'] = '<%(localhost_uri_g)s>; rel="original timegate"' % {
+            'localhost_uri_g': localhost_uri_g}
+    return redirect_obj
+     
+def dataRepresentationCallback(uri, linkformat):
+    """processing logic when requesting a data representation (information resource)"""
+    LOGGER.debug('Executing dataRepresentationCallback...')
+    if linkformat:
+        tm = generateLinkformat(uri)
+        response = make_response(tm,200)
+        response.headers['Content-Type'] = 'application/link-format; charset=utf-8'
+    else:
+        describe_query = DESCRIBE_TEMPLATE % {'uri': uri}
+        describe = sparqlQuery(
+            describe_query, 'http://abel:8890/sparql', format='application/rdf+xml')
+        response = make_response(describe, 200)
+        response.headers['Content-Type'] = 'application/rdf+xml; charset=utf-8'
+    return response
+
+def generateLinkformat(uri):
+    # get related timemaps
+    query_tm = RELATED_COMPLEX_WORKS % {'uri': uri}
+    tm_str = sparqlQuery(query_tm, 'http://abel:8890/sparql')
+    tm_obj = json.loads(tm_str)
+    # get related original timegate
+    query_ot = URI_G_TEMPLATE % {'uri': uri}
+    ot_str = sparqlQuery(query_ot, 'http://abel:8890/sparql')
+    ot_obj = json.loads(ot_str)
+    # get related mementos
+    query_m = RELATED_MEMENTOS % {'uri': uri}
+    m_str = sparqlQuery(query_m, 'http://abel:8890/sparql')
+    m_obj = json.loads(m_str)
+    # get startdate, enddate and type of date
+    timemap_list = []
+    timemap_list.append(uri)
+    for i in tm_obj['results']['bindings']:
+        timemap_list.append(i['complex_work']['value'])
+    timemap_info = {}
+    for i in timemap_list:
+        query_tminfo = TIMEMAPINFO % {'uri': i}
+        print(i)
+        tminfo_str = sparqlQuery(query_tminfo, 'http://abel:8890/sparql')
+        tminfo_obj = json.loads(tminfo_str)
+        timemap_info['http://localhost:5000/'+toLocalhostUri(i)] = (stringToHTTPDate(tminfo_obj['results']['bindings'][0]['startdate']['value']), \
+                                                                   stringToHTTPDate(tminfo_obj['results']['bindings'][0]['enddate']['value']), \
+                                                                   tminfo_obj['results']['bindings'][0]['typeofdate']['value'])                                                                
+    
+    response_body = ""
+    for i in ot_obj['results']['bindings']:
+       response_body += '<http://localhost:5000/'+toLocalhostUri(i['predecessor']['value'])+'>;rel="original timegate",\n'
+    response_body += '<http://localhost:5000/'+toLocalhostUri(uri)+'?rel=timemap>;rel="self";type="application/link-format"' \
+                     +';startdate="'+str(timemap_info['http://localhost:5000/'+toLocalhostUri(uri)][0])+'"' \
+                     +';enddate="'+str(timemap_info['http://localhost:5000/'+toLocalhostUri(uri)][1])+'"' \
+                     +';typeofdate="'+str(timemap_info['http://localhost:5000/'+toLocalhostUri(uri)][2])+'",\n'
+    for i in tm_obj['results']['bindings']:
+        response_body += '<http://localhost:5000/'+toLocalhostUri(i['complex_work']['value']) \
+                         +'?rel=timemap>;rel="timemap";type="application/link-format"' \
+                         +';startdate="'+str(timemap_info['http://localhost:5000/'+toLocalhostUri(i['complex_work']['value'])][0])+'"' \
+                         +';enddate="'+str(timemap_info['http://localhost:5000/'+toLocalhostUri(i['complex_work']['value'])][1])+'"' \
+                         +';typeofdate="'+str(timemap_info['http://localhost:5000/'+toLocalhostUri(i['complex_work']['value'])][2])+'",\n'
+                          
+    for i in m_obj['results']['bindings']:
+       response_body += '<http://localhost:5000/'+toLocalhostUri(i['memento']['value'])+'>;rel="memento";datetime="'+i['date']['value']+'",\n'
+    return response_body
 
 def isComplexWork(uri):
     """check whether the uri represents an instance of type cdm:complex_work"""
@@ -243,7 +365,6 @@ def determineLocation(uri, accept_datetime):
     LOGGER.debug("Location: %s" % location)
     return location
 
-
 def toCelexUri(uri):
     return uri.replace('memento', 'http://publications.europa.eu/resource/celex')
 
@@ -251,6 +372,16 @@ def toCelexUri(uri):
 def toLocalhostUri(uri):
     return uri.replace('http://publications.europa.eu/resource/celex', 'memento')
 
+def toLocalhostDataUri(uri, fext):
+    return uri.replace('http://publications.europa.eu/resource/celex', 'data')+fext
+
+def parseDate(text):
+    """"parses a HTTP-date and returns a datetime object"""
+    return datetime.datetime(*eut.parsedate(text)[:6])
+
+def stringToHTTPDate(text):
+    """converts an xsd:date into an HTTP-date string"""
+    return datetime.datetime.strptime(text.replace('+02:00',''),'%Y-%m-%d').strftime('%a, %d %b %Y %H:%M:%S %Z')+(' GMT')
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)

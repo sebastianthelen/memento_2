@@ -1,0 +1,164 @@
+# Request memento with constant Accept-Datetime value set to Sun, 10 Nov 2012 12:00:0 GMT (no modifications between the redirects)
+curl -L --dump-header "headers.txt" --header "Accept-Datetime:Sat, 10 Nov 2012 12:00:0 GMT" "http://localhost:5000/memento/01992L0043"
+----------
+HTTP/1.0 302 FOUND
+Content-Type: text/html; charset=utf-8
+Content-Length: 305
+Location: http://localhost:5000/memento/01992L0043-20040501
+Link: <http://localhost:5000/memento/01992L0043>; rel="original timegate", <http://localhost:5000/memento/01992L0043?rel=timemap>; rel="timemap"
+Vary: accept-datetime
+Server: Werkzeug/0.9.6 Python/3.4.1
+Date: Mon, 10 Nov 2014 15:22:21 GMT
+
+HTTP/1.0 302 FOUND
+Content-Type: text/html; charset=utf-8
+Content-Length: 265
+Location: http://localhost:5000/memento/01992L0043-20040501_0
+Link: <http://localhost:5000/memento/01992L0043>; rel="original timegate", <http://localhost:5000/memento/01992L0043?rel=timemap>; rel="timemap", <http://localhost:5000/memento/01992L0043-20040501>; rel="timegate", <http://localhost:5000/memento/01992L0043-20040501?rel=timemap>; rel="timemap" 
+Memento-Datetime: Fri, 30 Apr 2004 00:00:00  GMT
+Server: Werkzeug/0.9.6 Python/3.4.1
+Date: Mon, 10 Nov 2014 15:22:21 GMT
+
+HTTP/1.0 303 SEE OTHER
+Content-Type: text/html; charset=utf-8
+Content-Length: 267
+Location: http://localhost:5000/data/01992L0043-20040501_0.xml
+Memento-Datetime: Wed, 13 Jun 2012 00:00:00  GMT
+Link: <http://localhost:5000/memento/01992L0043>; rel="original timegate", <http://localhost:5000/memento/01992L0043?rel=timemap>; rel="timemap"
+Server: Werkzeug/0.9.6 Python/3.4.1
+Date: Mon, 10 Nov 2014 15:22:21 GMT
+
+HTTP/1.0 200 OK
+Content-Type: application/rdf+xml; charset=utf-8
+Content-Length: 1080
+Server: Werkzeug/0.9.6 Python/3.4.1
+Date: Mon, 10 Nov 2014 15:22:21 GMT
+
+
+
+
+
+# Request memento with adaptation of the Accept-Datetime for the second level timegate (datetime_negotiation = work_date_creation)
+curl --dump-header "headers.txt" --header "Accept-Datetime:Sat, 10 Nov 2012 12:00:0 GMT" "http://localhost:5000/memento/01992L0043"
+----------
+HTTP/1.0 302 FOUND
+Content-Type: text/html; charset=utf-8
+Content-Length: 305
+Location: http://localhost:5000/memento/01992L0043-20040501
+Link: <http://localhost:5000/memento/01992L0043>; rel="original timegate", <http://localhost:5000/memento/01992L0043?rel=timemap>; rel="timemap"
+Vary: accept-datetime
+Server: Werkzeug/0.9.6 Python/3.4.1
+Date: Mon, 10 Nov 2014 15:15:26 GMT
+
+# Adapt Accept-Datetime to a suitable value for work_date_creation. Information via the negotiated date can be retrieved from the timemap.
+curl -L --dump-header "headers.txt" --header "Accept-Datetime:Mon, 10 Nov 2014 12:00:0 GMT" "http://localhost:5000/memento/01992L0043-20040501"
+
+HTTP/1.0 302 FOUND
+Content-Type: text/html; charset=utf-8
+Content-Length: 265
+Location: http://localhost:5000/memento/01992L0043-20040501_1
+Link: <http://localhost:5000/memento/01992L0043>; rel="original timegate", <http://localhost:5000/memento/01992L0043?rel=timemap>; rel="timemap", <http://localhost:5000/memento/01992L0043-20040501>; rel="timegate", <http://localhost:5000/memento/01992L0043-20040501?rel=timemap>; rel="timemap" 
+Memento-Datetime: Fri, 30 Apr 2004 00:00:00  GMT
+Server: Werkzeug/0.9.6 Python/3.4.1
+Date: Mon, 10 Nov 2014 15:15:53 GMT
+
+HTTP/1.0 303 SEE OTHER
+Content-Type: text/html; charset=utf-8
+Content-Length: 267
+Location: http://localhost:5000/data/01992L0043-20040501_1.xml
+Memento-Datetime: Thu, 13 Jun 2013 00:00:00  GMT
+Link: <http://localhost:5000/memento/01992L0043>; rel="original timegate", <http://localhost:5000/memento/01992L0043?rel=timemap>; rel="timemap"
+Server: Werkzeug/0.9.6 Python/3.4.1
+Date: Mon, 10 Nov 2014 15:15:53 GMT
+
+HTTP/1.0 200 OK
+Content-Type: application/rdf+xml; charset=utf-8
+Content-Length: 1080
+Server: Werkzeug/0.9.6 Python/3.4.1
+Date: Mon, 10 Nov 2014 15:15:53 GMT
+
+
+
+
+
+# Request the most recent version
+curl -L --dump-header "headers.txt" "http://localhost:5000/memento/01992L0043"
+----------
+HTTP/1.0 302 FOUND
+Content-Type: text/html; charset=utf-8
+Content-Length: 309
+Location: http://localhost:5000/memento/01992L0043-20130701_1
+Link: <http://localhost:5000/memento/01992L0043>; rel="original timegate", <http://localhost:5000/memento/01992L0043?rel=timemap>; rel="timemap"
+Vary: accept-datetime
+Server: Werkzeug/0.9.6 Python/3.4.1
+Date: Mon, 10 Nov 2014 14:55:27 GMT
+
+HTTP/1.0 303 SEE OTHER
+Content-Type: text/html; charset=utf-8
+Content-Length: 267
+Location: http://localhost:5000/data/01992L0043-20130701_1.xml
+Memento-Datetime: Sun, 17 Jul 2011 00:00:00  GMT
+Link: <http://localhost:5000/memento/01992L0043>; rel="original timegate", <http://localhost:5000/memento/01992L0043?rel=timemap>; rel="timemap"
+Server: Werkzeug/0.9.6 Python/3.4.1
+Date: Mon, 10 Nov 2014 14:55:27 GMT
+
+HTTP/1.0 200 OK
+Content-Type: application/rdf+xml; charset=utf-8
+Content-Length: 1080
+Server: Werkzeug/0.9.6 Python/3.4.1
+Date: Mon, 10 Nov 2014 14:55:27 GMT
+
+
+
+
+
+# Request a memento with a Accept-Datetime < the earliest negotiable work. This behaviour is in conflict with RFC 7089 Section 4.5.3, but makes in our opinion more sense.
+curl -L --dump-header "headers.txt" --header "Accept-Datetime:Tue, 01 Jul 2003 12:00:0 GMT" "http://localhost:5000/memento/01992L0043"
+----------
+HTTP/1.0 406 NOT ACCEPTABLE
+Content-Type: text/html; charset=utf-8
+Content-Length: 40
+Server: Werkzeug/0.9.6 Python/3.4.1
+Date: Mon, 10 Nov 2014 15:28:13 GMT
+
+
+
+
+
+# Request timemap in link format
+curl -L --dump-header "headers.txt" --header "Accept:application/link-format" "http://localhost:5000/memento/01992L0043?rel=timemap"
+----------
+HTTP/1.0 303 SEE OTHER
+Content-Type: text/html; charset=utf-8
+Content-Length: 245
+Location: http://localhost:5000/data/01992L0043.txt
+Link: <http://localhost:5000/memento/01992L0043>; rel="original timegate"
+Server: Werkzeug/0.9.6 Python/3.4.1
+Date: Mon, 10 Nov 2014 14:58:17 GMT
+
+HTTP/1.0 200 OK
+Content-Type: application/link-format; charset=utf-8
+Content-Length: 822
+Server: Werkzeug/0.9.6 Python/3.4.1
+Date: Mon, 10 Nov 2014 14:58:17 GMT
+
+
+
+
+
+# Request "timemap" in rdf/xml format (default)
+curl -L --dump-header "headers.txt" "http://localhost:5000/memento/01992L0043?rel=timemap"
+----------
+HTTP/1.0 303 SEE OTHER
+Content-Type: text/html; charset=utf-8
+Content-Length: 245
+Location: http://localhost:5000/data/01992L0043.xml
+Link: <http://localhost:5000/memento/01992L0043>; rel="original timegate"
+Server: Werkzeug/0.9.6 Python/3.4.1
+Date: Mon, 10 Nov 2014 15:00:37 GMT
+
+HTTP/1.0 200 OK
+Content-Type: application/rdf+xml; charset=utf-8
+Content-Length: 866
+Server: Werkzeug/0.9.6 Python/3.4.1
+Date: Mon, 10 Nov 2014 15:00:37 GMT

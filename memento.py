@@ -1,6 +1,6 @@
 # Authors: Sebastian Thelen, Patrick Gratz
 # Description: The following code represents a prototypical implementation of the Memento framework (RFC 7089). For further information concerning Memento we refer to http://www.mementoweb.org/. 
-# Prerequisites: Python 3.x, Flask microframework for Python (http://flask.pocoo.org/), Virtuoso 7 or an triple store with an equivalent SPARQL endpoint
+# Prerequisites: Python 3.x, Flask microframework for Python (http://flask.pocoo.org/), Virtuoso 7 or a triple store with an equivalent SPARQL endpoint
 
 from flask import Flask
 from flask import request

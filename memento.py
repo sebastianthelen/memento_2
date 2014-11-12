@@ -313,13 +313,13 @@ def generateLinkformatTimemap(uri):
     # add link to the original timegate
     response_body = ''.join(['<'+toLocalhostUri(i['predecessor']['value'])+'>;rel="original timegate"\n' for i in ot_results])
     # add link for each memento                              
-    response_body += ''.join(['<'+toLocalhostUri(i['memento']['value'])+'>;rel="memento";datetime="'+stringToHTTPDate(i['date']['value']+'\n"') for i in m_results])
+    response_body += ''.join(['<'+toLocalhostUri(i['memento']['value'])+'>;rel="memento";datetime="'+stringToHTTPDate(i['date']['value'])+'"\n' for i in m_results])
     # add link for timemaps
     response_body += ''.join(['<'+toLocalhostUri(i['evolutive_work']['value']) \
                          +'?rel=timemap>;rel="timemap";type="application/link-format"' \
                          +';from="'+str(timemap_info[toLocalhostUri(i['evolutive_work']['value'])][0])+'"' \
                          +';until="'+str(timemap_info[toLocalhostUri(i['evolutive_work']['value'])][1])+'"' \
-                         +';dtype="'+str(timemap_info[toLocalhostUri(i['evolutive_work']['value'])][2]) + '\n"' for i in tm_results])
+                         +';dtype="'+str(timemap_info[toLocalhostUri(i['evolutive_work']['value'])][2]) + '"\n' for i in tm_results])
     # add link to self
     response_body += '<'+toLocalhostUri(uri)+'?rel=timemap>;rel="self";type="application/link-format"' \
                      +';from="'+str(timemap_info[toLocalhostUri(uri)][0])+'"' \

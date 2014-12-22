@@ -133,6 +133,8 @@ def get_URI_G(uri):
     query = URI_G_TEMPLATE % {'uri': uri}
     sparql_results = sparqlQuery(query)
     # global uri_g
+    if not sparql_results:
+        return None
     uri_g = sparql_results[0]['predecessor']['value']
     return uri_g
 

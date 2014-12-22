@@ -24,8 +24,8 @@ import re
 requests_log = logging.getLogger("requests")
 requests_log.setLevel(logging.ERROR)
 
-# global variable stores uri of original resource uthread safe???!?!
-uri_g = None
+# global variable stores address of host and sparql-endpoint
+
 local_host = 'http://localhost:5000'
 sparql_endpoint = 'http://abel:8890/sparql'
 app = Flask(__name__)
@@ -128,6 +128,14 @@ def sparqlQuery(query, format="application/json"):
         return json_results['results']['bindings']
     return resp.text
 
+def get_URI_G(uri):
+    """retrieves URI of the related original resource"""
+    query = URI_G_TEMPLATE % {'uri': uri}
+    sparql_results = sparqlQuery(query)
+    # global uri_g
+    uri_g = sparql_results[0]['predecessor']['value']
+    return uri_g
+
 
 @app.route('/memento/<id>')
 def processMementoRequest(id=None):
@@ -138,10 +146,7 @@ def processMementoRequest(id=None):
     if not(isEvolutiveWork(uri)):
         response = mementoCallback(uri)
         return response
-    query = URI_G_TEMPLATE % {'uri': uri}
-    sparql_results = sparqlQuery(query)
-    global uri_g
-    uri_g = sparql_results[0]['predecessor']['value']
+    uri_g = get_URI_G(uri)
     LOGGER.debug("URI-G: %s" % uri_g)
     # uri matches a complex work and the rel parameter is set to 'timemap'
     if request.args.get('rel') == 'timemap':
@@ -222,6 +227,8 @@ def timegateCallback(uri):
     datetime_property = determineDatetimeProperty(uri)
     # compute redirect
     location = determineLocation(uri, accept_datetime)
+    # get URI-G
+    uri_g = get_URI_G(uri)
     if location == None:
         return make_response("Bad Request. Check your query parameters", 406)
     # link headers
@@ -253,6 +260,8 @@ def timegateCallback(uri):
 def mementoCallback(uri):
     """processing logic when requesting a memento"""
     LOGGER.debug('Executing mementoCallback...')
+    # get URI-G
+    uri_g = get_URI_G(uri)
     mementoDatetimeResponseObj = getMementoDatetime(uri)
     # memento datetime could not be retrieved
     # --> return 404 error object
@@ -272,6 +281,8 @@ def mementoCallback(uri):
 
 def getMementoDatetime(uri):
     """return response containing memento-datetime for a given resource"""
+    # get URI-G
+    uri_g = get_URI_G(uri)
     memento_datemtime_query = MEMENTO_DATETIME_TEMPLATE % {'uri': uri}
     #LOGGER.debug('MEMENTO_DATETIME_TEMPLATE: %s' % memento_datemtime_query )
     sparql_results = sparqlQuery(memento_datemtime_query)
@@ -288,6 +299,8 @@ def getMementoDatetime(uri):
 def timemapCallback(uri):
     """processing logic when requesting a timemap"""
     LOGGER.debug('Executing timemapCallback...')
+    # get URI-G
+    uri_g = get_URI_G(uri)
     localhost_uri_g = toLocalhostUri(uri_g)
     redirect_obj = None
     if(request.headers['Accept'] == 'application/link-format'):

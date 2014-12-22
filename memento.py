@@ -144,21 +144,23 @@ def processMementoRequest(id=None):
     """process memento service request (non-information resources)"""
     response = None
     uri = "http://publications.europa.eu/resource/celex/" + id
+    # get URI of Original Resource
+    uri_g = get_URI_G(uri)
     # return memento (target resource is not a complex work)
     if not(isEvolutiveWork(uri)):
-        response = mementoCallback(uri)
+        response = mementoCallback(uri, uri_g)
         return response
-    uri_g = get_URI_G(uri)
+
     LOGGER.debug("URI-G: %s" % uri_g)
     # uri matches a complex work and the rel parameter is set to 'timemap'
     if request.args.get('rel') == 'timemap':
-        response = timemapCallback(uri)
+        response = timemapCallback(uri, uri_g)
     # uri matches a top level complex work (original timegate)
     elif uri_g == uri:
         response = originalTimegateCallback(uri)
     # uri matches a complex work but not the top level one
     else:
-        response = timegateCallback(uri)
+        response = timegateCallback(uri, uri_g)
     return response
 
 
@@ -219,7 +221,7 @@ def originalTimegateCallback(uri_g):
     return redirect_obj
 
 
-def timegateCallback(uri):
+def timegateCallback(uri, uri_g):
     """processing logic when requesting an intermediate timegate"""
     LOGGER.debug('Executing timegateCallback...')
     # default to now if no accept-datetime is provided
@@ -229,8 +231,6 @@ def timegateCallback(uri):
     datetime_property = determineDatetimeProperty(uri)
     # compute redirect
     location = determineLocation(uri, accept_datetime)
-    # get URI-G
-    uri_g = get_URI_G(uri)
     if location == None:
         return make_response("Bad Request. Check your query parameters", 406)
     # link headers
@@ -247,7 +247,7 @@ def timegateCallback(uri):
         '<%(localhost_uri_t)s>; rel="timemap" ' % {
             'localhost_uri_g': localhost_uri_g, 'localhost_uri_tg': localhost_uri_tg,
             'localhost_uri': localhost_uri, 'localhost_uri_t': localhost_uri_t}
-    mementoDatetimeResponseObj = getMementoDatetime(uri)
+    mementoDatetimeResponseObj = getMementoDatetime(uri, uri_g)
     # memento datetime could not be retrieved
     # --> return 404 error object
     if mementoDatetimeResponseObj.status_code == 404:
@@ -259,12 +259,10 @@ def timegateCallback(uri):
     return redirect_obj
 
 
-def mementoCallback(uri):
+def mementoCallback(uri, uri_g):
     """processing logic when requesting a memento"""
     LOGGER.debug('Executing mementoCallback...')
-    # get URI-G
-    uri_g = get_URI_G(uri)
-    mementoDatetimeResponseObj = getMementoDatetime(uri)
+    mementoDatetimeResponseObj = getMementoDatetime(uri, uri_g)
     # memento datetime could not be retrieved
     # --> return 404 error object
     if mementoDatetimeResponseObj.status_code == 404:
@@ -281,10 +279,8 @@ def mementoCallback(uri):
     return response
 
 
-def getMementoDatetime(uri):
+def getMementoDatetime(uri, uri_g):
     """return response containing memento-datetime for a given resource"""
-    # get URI-G
-    uri_g = get_URI_G(uri)
     memento_datemtime_query = MEMENTO_DATETIME_TEMPLATE % {'uri': uri}
     #LOGGER.debug('MEMENTO_DATETIME_TEMPLATE: %s' % memento_datemtime_query )
     sparql_results = sparqlQuery(memento_datemtime_query)
@@ -298,11 +294,9 @@ def getMementoDatetime(uri):
     return response
 
 
-def timemapCallback(uri):
+def timemapCallback(uri, uri_g):
     """processing logic when requesting a timemap"""
     LOGGER.debug('Executing timemapCallback...')
-    # get URI-G
-    uri_g = get_URI_G(uri)
     localhost_uri_g = toLocalhostUri(uri_g)
     redirect_obj = None
     if(request.headers['Accept'] == 'application/link-format'):

@@ -8,6 +8,7 @@ from flask import Flask
 from flask import request
 from flask import redirect
 from flask import make_response
+from pytz import timezone
 from email.utils import formatdate
 from wsgiref.handlers import format_date_time
 import flask
@@ -18,6 +19,7 @@ import logging
 import logging.handlers
 import email.utils as eut
 import datetime
+import pytz
 import re
 
 # suppress logging messages from requests lib
@@ -79,7 +81,7 @@ EVOLUTIVE_WORK_TEMPLATE = (
 # return memento datetime of given resource (corresponds to
 # cdm:work_date_document)
 MEMENTO_DATETIME_TEMPLATE = (
-    'PREFIX cdm: <http://publications.europa.eu/ontology/cdm#> '
+    'PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>'
     'select ?date '
     'where '
     '{<%(uri)s> ?p ?date;'
@@ -143,7 +145,7 @@ def get_URI_G(uri):
 def processMementoRequest(id=None):
     """process memento service request (non-information resources)"""
     response = None
-    uri = "http://publications.europa.eu/resource/celex/" + id
+    uri = "http://cellar1-dev.publications.europa.eu/resource/celex/" + id
     # get URI of Original Resource
     uri_g = get_URI_G(uri)
     # return memento (target resource is not a complex work)
@@ -170,7 +172,7 @@ def processDataRequest(id=None):
     LOGGER.debug('Processing data request ...')
 
     response = None
-    uri = "http://publications.europa.eu/resource/celex/" + id
+    uri = "http://cellar1-dev.publications.europa.eu/resource/celex/" + id
     if id.endswith('.txt'):
         # return application/link-format
         response = dataRepresentationCallback(uri.replace('.txt', ''), True)
@@ -414,37 +416,52 @@ def determineLocation(uri, accept_datetime):
 
 def toCelexUri(uri):
     """transform a local memento uri into celex uri"""
-    return uri.replace('memento', 'http://publications.europa.eu/resource/celex')
+    return uri.replace('memento', 'http://cellar1-dev.publications.europa.eu/resource/celex')
 
 
 def toLocalRedirectUri(uri):
     """transform a celex uri into a relative, local,  memento uri"""
-    return uri.replace('http://publications.europa.eu/resource/celex', 'memento')
+    return uri.replace('http://cellar1-dev.publications.europa.eu/resource/celex', 'memento')
 
 
 def toLocalRedirectDataUri(uri, fext):
     """transform a celex uri into a relative, local, data uri"""
-    return uri.replace('http://publications.europa.eu/resource/celex', 'data') + fext
+    return uri.replace('http://cellar1-dev.publications.europa.eu/resource/celex', 'data') + fext
 
 
 def toLocalhostUri(uri):
     """transform a celex uri into an absolute, local, memento uri"""
-    return uri.replace('http://publications.europa.eu/resource/celex', '%(localhost)s/memento' % {'localhost': local_host})
+    return uri.replace('http://cellar1-dev.publications.europa.eu/resource/celex', '%(localhost)s/memento' % {'localhost': local_host})
 
 
 def toLocalhostDataUri(uri, fext):
     """transform a celex uri into an absolute, local, data uri"""
-    return uri.replace('http://publications.europa.eu/resource/celex', '%(localhost)s/data' % {'localhost': local_host}) + fext
+    return uri.replace('http://cellar1-dev.publications.europa.eu/resource/celex', '%(localhost)s/data' % {'localhost': local_host}) + fext
 
 
 def parseHTTPDate(text):
     """"parse a HTTP-date and returns a datetime object"""
-    return datetime.datetime(*eut.parsedate(text)[:6])
+    # parse UTC datetime from text (value of Accept-Datetime)
+    utc_dt = datetime.datetime(*eut.parsedate(text)[:6], tzinfo=timezone('UTC'))
+    # transform UTC datetime into local time
+    local_dt = utc_dt.astimezone(timezone('Europe/Luxembourg'))
+    # return local datetime without timezone information for further processing in virtuoso
+    dt = datetime.datetime(local_dt.year, local_dt.month, local_dt.day, local_dt.hour, local_dt.minute, local_dt.second)
+    return dt
 
 
 def stringToHTTPDate(text):
     """convert a xsd:date into an HTTP-date string"""
-    return datetime.datetime.strptime(text.rsplit('+', 1)[0], '%Y-%m-%d').strftime('%a, %d %b %Y %H:%M:%S %Z') + (' GMT')
+    # parse datetime from text (SPARQL result). Supported formats are: %Y-%m-%d %H:%M:%S and %Y-%m-%d
+    try:
+        dt = datetime.datetime.strptime(text, '%Y-%m-%d %H:%M:%S')
+    except ValueError:
+        dt = datetime.datetime.strptime(text, '%Y-%m-%d')
+    # localize datetime (set timezone to CET/CEST)
+    local_dt = pytz.timezone('Europe/Luxembourg').localize(datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second))
+    # transform localized datetime into UTC datetime
+    utc_dt = local_dt.astimezone(timezone('UTC'))
+    return utc_dt.strftime('%a, %d %b %Y %H:%M:%S') + (' GMT')
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)

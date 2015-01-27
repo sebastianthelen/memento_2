@@ -32,8 +32,8 @@ local_host = 'http://localhost:5000'
 sparql_endpoint = 'http://abel:8890/sparql'
 app = Flask(__name__)
 
-# compute original resource (URI-G) in a hierarchy
-URI_G_TEMPLATE = (
+# compute original resource (URI-R) in a hierarchy
+URI_R_TEMPLATE = (
     'PREFIX cdm: <http://publications.europa.eu/ontology/cdm#> '
     'select distinct ?predecessor where { '
     '?predecessor cdm:complex_work_has_member_work* <%(uri)s>. '
@@ -130,9 +130,9 @@ def sparqlQuery(query, format="application/json"):
         return json_results['results']['bindings']
     return resp.text
 
-def get_URI_G(uri):
+def get_URI_R(uri):
     """retrieves URI of the related original resource"""
-    query = URI_G_TEMPLATE % {'uri': uri}
+    query = URI_R_TEMPLATE % {'uri': uri}
     sparql_results = sparqlQuery(query)
     # global uri_g
     if not sparql_results:
@@ -147,22 +147,25 @@ def processMementoRequest(id=None):
     response = None
     uri = "http://cellar1-dev.publications.europa.eu/resource/celex/" + id
     # get URI of Original Resource
-    uri_g = get_URI_G(uri)
+    uri_r = get_URI_R(uri)
     # return memento (target resource is not a complex work)
     if not(isEvolutiveWork(uri)):
-        response = mementoCallback(uri, uri_g)
+        response = mementoCallback(uri, uri_r)
         return response
 
-    LOGGER.debug("URI-G: %s" % uri_g)
+    LOGGER.debug("URI-R: %s" % uri_r)
     # uri matches a complex work and the rel parameter is set to 'timemap'
     if request.args.get('rel') == 'timemap':
-        response = timemapCallback(uri, uri_g)
-    # uri matches a top level complex work (original timegate)
-    elif uri_g == uri:
-        response = originalTimegateCallback(uri)
-    # uri matches a complex work but not the top level one
+        response = timemapCallback(uri, uri_r)
+    # uri matches an intermediate resource and the rel parameter is set to 'intermediate'
+    elif request.args.get('rel') == 'intermediate':
+        response = intermediateCallback(uri_r)
+    # uri matches a timegate resource (uri != uri_r)
+    elif uri != uri_r:
+        response = timegateCallback(uri, uri_r)
+    # uri matches original resource
     else:
-        response = timegateCallback(uri, uri_g)
+        response = originalResourceCallback(uri_r)
     return response
 
 
@@ -182,24 +185,42 @@ def processDataRequest(id=None):
     return response
 
 
-def originalTimegateCallback(uri_g):
+def originalResourceCallback(uri_r):
     """processing logic when requesting an original resource"""
     LOGGER.debug('Executing originalResourceCallback...')
-    accept_datetime = None
+    # return redirection object
+    localhost_uri_i = toLocalhostUri(uri_r + '?rel=intermediate')
+    # current timestamp
+    now = time.strftime("%Y-%m-%dT%XZ")
+    location = uri_r
+    # cascading selection of most recent representation
+    while isEvolutiveWork(location):
+        location = determineLocation(location, now)
+        if location == None:
+            break
+    redirect_obj = redirect(toLocalhostUri(location), code=303)
+    redirect_obj.headers['Link'] = '<%(localhost_uri_i)s>; rel="timegate"' % {
+            'localhost_uri_i': localhost_uri_i}
+    return redirect_obj
+
+
+def intermediateCallback(uri_r):
+    """processing logic when requesting an intermediate resource"""
+    LOGGER.debug('Executing intermediateResourceCallback...')
     location = None
-    # redirect to intermediate timegate resource
+    # redirect to timegate resource
     if 'Accept-Datetime' in request.headers:
         accept_datetime = parseHTTPDate(request.headers['Accept-Datetime'])
         LOGGER.debug('Accept-Datetime: %s' % accept_datetime)
         # determine negotiation dimension
-        datetime_property = determineDatetimeProperty(uri_g)
+        datetime_property = determineDatetimeProperty(uri_r)
         # compute location information of redirect
-        location = determineLocation(uri_g, accept_datetime)
+        location = determineLocation(uri_r, accept_datetime)
     # redirect to most recent representation
     else:
         # current timestamp
         now = time.strftime("%Y-%m-%dT%XZ")
-        location = uri_g
+        location = uri_r
         # cascading selection of most recent representation
         while isEvolutiveWork(location):
             location = determineLocation(location, now)
@@ -210,23 +231,17 @@ def originalTimegateCallback(uri_g):
     if location == None:
         return make_response("Bad Request. Check your query parameters", 406)
     # link headers
-    localhost_uri_g = toLocalhostUri(uri_g)
-    localhost_uri_t = toLocalhostUri(uri_g + '?rel=timemap')
-    LOGGER.debug(localhost_uri_g)
-    LOGGER.debug(localhost_uri_t)
+    localhost_uri_r = toLocalhostUri(uri_r)
     # return redirection object
     redirect_obj = redirect(toLocalhostUri(location), code=302)
-    redirect_obj.headers['Link'] = '<%(localhost_uri_g)s>; rel="original timegate", ' \
-        '<%(localhost_uri_t)s>; rel="timemap"' % {
-            'localhost_uri_g': localhost_uri_g, 'localhost_uri_t': localhost_uri_t}
-    redirect_obj.headers['Vary'] = 'accept-datetime'
+    redirect_obj.headers['Link'] = '<%(localhost_uri_r)s>; rel="original"' % {
+            'localhost_uri_r': localhost_uri_r}
     return redirect_obj
 
-
-def timegateCallback(uri, uri_g):
-    """processing logic when requesting an intermediate timegate"""
+def timegateCallback(uri, uri_r):
+    """processing logic when requesting a timegate"""
     LOGGER.debug('Executing timegateCallback...')
-    # default to now if no accept-datetime is provided
+    # default to now() if no accept-datetime is provided
     accept_datetime = ('Accept-Datetime' in request.headers) and parseHTTPDate(request.headers[
         'Accept-Datetime']) or time.strftime("%Y-%m-%dT%XZ")
     # dimension of datetime negotiation
@@ -236,28 +251,17 @@ def timegateCallback(uri, uri_g):
     if location == None:
         return make_response("Bad Request. Check your query parameters", 406)
     # link headers
-    localhost_uri_g = toLocalhostUri(uri_g)
-    localhost_uri_tg = toLocalhostUri(uri_g + '?rel=timemap')
-    localhost_uri = toLocalhostUri(uri)
-    localhost_uri_t = localhost_uri + '?rel=timemap'
-    LOGGER.debug(localhost_uri_g)
-    LOGGER.debug(localhost_uri_tg)
-    # return redirection object
+    localhost_uri_r = toLocalhostUri(uri_r)
+    localhost_uri_g = toLocalhostUri(uri)
+    localhost_uri_t = localhost_uri_g + '?rel=timemap'
+    # redirection object
     redirect_obj = redirect(toLocalRedirectUri(location), code=302)
-    redirect_obj.headers['Link'] = '<%(localhost_uri_g)s>; rel="original timegate", ' \
-        '<%(localhost_uri_tg)s>; rel="timemap", <%(localhost_uri)s>; rel="timegate", ' \
+    redirect_obj.headers['Link'] = '<%(localhost_uri_r)s>; rel="original", ' \
+        '<%(localhost_uri_g)s>; rel="timegate", ' \
         '<%(localhost_uri_t)s>; rel="timemap" ' % {
-            'localhost_uri_g': localhost_uri_g, 'localhost_uri_tg': localhost_uri_tg,
-            'localhost_uri': localhost_uri, 'localhost_uri_t': localhost_uri_t}
-    mementoDatetimeResponseObj = getMementoDatetime(uri, uri_g)
-    # memento datetime could not be retrieved
-    # --> return 404 error object
-    if mementoDatetimeResponseObj.status_code == 404:
-        return mementoDatetimeResponseObj
-    print(type(mementoDatetimeResponseObj))
-    redirect_obj.headers[
-        'Memento-Datetime'] = stringToHTTPDate(mementoDatetimeResponseObj.data.
-                                               decode(encoding='UTF-8'))
+            'localhost_uri_r': localhost_uri_r,
+            'localhost_uri_g': localhost_uri_g,
+            'localhost_uri_t': localhost_uri_t}
     return redirect_obj
 
 
@@ -335,7 +339,7 @@ def generateLinkformatTimemap(uri):
     query_tm = RELATED_EVOLUTIVE_WORKS % {'uri': uri}
     tm_results = sparqlQuery(query_tm)
     # get related original timegate
-    query_ot = URI_G_TEMPLATE % {'uri': uri}
+    query_ot = URI_R_TEMPLATE % {'uri': uri}
     ot_results = sparqlQuery(query_ot)
     # get related mementos
     query_m = RELATED_MEMENTOS % {'uri': uri}
